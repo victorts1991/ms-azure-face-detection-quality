@@ -1,0 +1,1 @@
+# ms-azure-face-detection-quality
