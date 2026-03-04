@@ -1,6 +1,6 @@
 # MS Azure Face Detection Quality 🛡️
 
-Microserviço em FastAPI para validação de qualidade de capturas faciais utilizando **Azure AI Face API**, implantado em **Azure Kubernetes Service (AKS)** com **CI/CD via GitHub Actions**.
+Microserviço em FastAPI para validação de qualidade de capturas faciais utilizando **Azure AI Face API**, implantado em **Azure Kubernetes Service (AKS)** com infraestrutura e deploy 100% automatizados.
 
 ## 🚀 Objetivo
 Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento facial (iluminação, acessórios, ângulo) antes de persistir a imagem no Azure Blob Storage.
@@ -10,65 +10,105 @@ Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento 
 * **Framework:** FastAPI
 * **IA:** Azure AI Foundry (Face API)
 * **Infra:** Azure Kubernetes Service (AKS) & Azure Container Registry (ACR)
+* **Provisionamento:** Terraform (IaC)
+* **CI/CD:** GitHub Actions
 * **Storage:** Azure Blob Storage
-* **DevOps:** GitHub Actions (CI/CD) & Pytest
 
 ---
 
 ## 🗺️ Roadmap de Desenvolvimento
 
-### 1. Preparação do Ambiente (Azure Portal)
-- [X] Criar Grupo de Recursos.
-- [X] Provisionar Azure AI Services (Face API).
-- [X] Criar Storage Account e Container de fotos.
-- [X] Criar Azure Container Registry (ACR).
-- [X] Criar Cluster AKS.
+### 1. Infraestrutura como Código (Terraform)
+- [x] Script de Bootstrap para Backend Remoto (Blob Storage para .tfstate).
+- [x] Módulo de Serviços (Face API + Storage Account).
+- [x] Módulo de Cluster (AKS + ACR + Role Assignment).
+- [x] Provisionamento Automatizado via `terraform apply`.
 
 ### 2. Desenvolvimento do Microserviço
-- [ ] Setup do projeto FastAPI e Poetry/Pip.
-- [ ] Implementação do Client da Face API (Lógica de validação: glasses, blur, headPose).
-- [ ] Implementação do Upload para Blob Storage (fotos aprovadas).
-- [ ] Endpoint de recuperação de imagem por ID.
+- [ ] Setup do projeto FastAPI e dependências.
+- [ ] Implementação do Client da Face API.
+- [ ] Implementação do Upload para Blob Storage.
+- [ ] Documentação Swagger/OpenAPI.
 
 ### 3. Containerização e Kubernetes
-- [ ] Criação do Dockerfile.
-- [ ] Manifestos K8s (Deployment, Service, HPA).
-- [ ] Configuração de Secrets no K8s para chaves da Azure.
+- [ ] Criação do Dockerfile (Multi-stage build).
+- [ ] Manifestos K8s (Deployment, Service LoadBalancer).
+- [ ] Configuração de Segredos (Secrets) no Cluster.
 
-### 4. CI/CD & Testes
-- [ ] Escrita de Testes Unitários com Pytest.
-- [ ] Pipeline de CI (Lint, Test, Build & Push ACR).
-- [ ] Pipeline de CD (Deploy to AKS).
-
-### 5. Finalização
-- [ ] Gravação de vídeo demonstrativo.
-- [ ] Documentação dos endpoints (Swagger).
+### 4. Automação Full CI/CD (GitHub Actions)
+- [ ] Pipeline de **Integração Contínua (CI)**: Lint, Testes Unitários e Build/Push da imagem Docker para o ACR.
+- [ ] Pipeline de **Entrega Contínua (CD)**: Atualização automática do Cluster AKS com a nova versão da imagem.
+- [ ] Gerenciamento de Secrets do GitHub para autenticação na Azure via Service Principal.
 
 ---
 
-## 🛠️ Guia de Configuração da Infraestrutura (Etapa 1)
+## 🛠️ Guia de Configuração da Infraestrutura (Início Rápido)
 
-Este guia detalha o protocolo de provisionamento do ambiente na **Azure** para o projeto de Análise de Qualidade Facial. A execução depende da validação manual do administrador em cada etapa para garantir a compatibilidade dos recursos.
+Este guia detalha como subir toda a infraestrutura na Azure utilizando Terraform.
 
-### 1. Preparação da Camada de Assinatura
-* **Elevação de Privilégios:** A assinatura deve ser convertida para o modelo **Pay-As-You-Go** (Assinatura do Azure 1) para permitir o provisionamento de recursos de computação.
-* **Gestão Financeira:** Validação manual do saldo de créditos promocionais (R$ 1.028,70) no painel de *Gerenciamento de Custos* para garantir a cobertura dos serviços.
+### 1. Pré-requisitos
+* **Azure CLI** instalado e logado (`az login`).
+* **Terraform** (v1.0+) instalado.
+* **Docker Desktop** rodando.
+* **Assinatura Azure** ativa.
 
-### 2. Configuração de Recursos Críticos (Pré-requisitos)
-Antes do deploy do cluster, os seguintes serviços de suporte devem estar operacionais:
-* **Network & Compute:** Definição da região estratégica (recomendado: **East US 2**) para disponibilidade de hardware.
-* **Azure AI Services:** Instância da **Face API** provisionada para processamento de biometria e análise de atributos.
-* **Storage & Registry:** * **Storage Account** configurado para a persistência de blobs (imagens).
-    * **Azure Container Registry (ACR)** (`crfacequalityvictor`) estabelecido para o armazenamento privado de imagens Docker.
+### 2. Passo a Passo Inicial
 
-### 3. Provisionamento do Azure Kubernetes Service (AKS)
-A criação do cluster `aks-face-quality` exige a aplicação rigorosa dos seguintes parâmetros de arquitetura:
-* **Escalabilidade:** Configuração de **1 nó** em modo **Manual** no pool de sistema (`agentpool`).
-* **Hardware:** Seleção da família de máquinas compatível (Ex: Série **DDSv5**) para evitar conflitos de suporte regional.
-* **Topologia de Rede:** O campo **Zonas de Disponibilidade** deve ser definido como **"Nenhum"** para mitigar erros de restrição física (`AvailabilityZoneNotSupported`).
-* **RBAC & Integração:** Vinculação nativa entre o **ACR** e o **AKS** na aba de integrações para autorizar o *pull* automático de imagens sem necessidade de segredos manuais.
+#### A. Bootstrap (Preparação do Cofre)
+O Terraform precisa de um lugar seguro para guardar o estado da sua infraestrutura. Execute o script de automação inicial:
+
+```bash
+chmod +x bootstrap.sh
+./bootstrap.sh
+```
+
+*Este script criará um Resource Group chamado `rg-terraform-state`. **Anote o nome da Storage Account gerada no final.***
+
+#### B. Configuração do Backend
+Abra o arquivo `terraform/main.tf` e atualize o bloco `backend "azurerm"` com o nome da Storage Account gerada:
+
+```hcl
+backend "azurerm" {
+  resource_group_name  = "rg-terraform-state"
+  storage_account_name = "ST_GERADA_AQUI"
+  container_name       = "tfstate"
+  key                  = "face-quality.terraform.tfstate"
+}
+```
+
+#### C. Provisionamento (Deploy)
+Agora, dispare a criação de todos os recursos:
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply -auto-approve
+```
+
+### 3. Conectando ao Ambiente
+Após o `apply` finalizar, configure seu terminal:
+
+```bash
+# 1. Obter credenciais do AKS
+az aks get-credentials --resource-group rg-face-quality-prod --name facequality-aks
+
+# 2. Login no Registro de Containers (ACR)
+az acr login --name facequalityregistryb814a9
+
+# 3. Validar conexão com o cluster
+kubectl get nodes
+```
 
 ---
 
-### ✅ Status da Etapa 1: Homologada
-Infraestrutura provisionada e em execução (Status: *Succeeded*).
+## 🔑 Variáveis de Ambiente Críticas
+Os seguintes valores serão gerados pelo Terraform e devem ser usados na API:
+* **FACE_API_ENDPOINT:** Obtido via `terraform output FACE_API_ENDPOINT`
+* **FACE_API_KEY:** Obtido via `terraform output FACE_API_KEY`
+* **STORAGE_ACCOUNT_NAME:** Obtido via `terraform output STORAGE_ACCOUNT_NAME`
+
+---
+
+### ✅ Status da Etapa 1: Homologada via IaC
+Infraestrutura provisionada, modularizada e versionada com sucesso.
