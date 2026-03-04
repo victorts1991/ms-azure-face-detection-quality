@@ -1,5 +1,7 @@
 # MS Azure Face Detection Quality 🛡️
 
+![Status: Em Desenvolvimento](https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github)
+
 Microserviço em FastAPI para validação de qualidade de capturas faciais utilizando **Azure AI Face API**, implantado em **Azure Kubernetes Service (AKS)** com infraestrutura e deploy 100% automatizados.
 
 ## 🚀 Objetivo
