@@ -36,3 +36,4 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 
 # Output para o módulo raiz ler
 output "acr_login_server" { value = azurerm_container_registry.acr.login_server }
+output "acr_name" { value = azurerm_container_registry.acr.name }
