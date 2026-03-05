@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+azure-cognitiveservices-vision-face
+azure-storage-blob
+pydantic-settings
+pytest
+httpx
+pytest-asyncio
+python-dotenv

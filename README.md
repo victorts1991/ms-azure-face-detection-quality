@@ -8,13 +8,16 @@ Microserviço em FastAPI para validação de qualidade de capturas faciais utili
 Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento facial (iluminação, acessórios, ângulo) antes de persistir a imagem no Azure Blob Storage.
 
 ## 🛠️ Stack Tecnológica
-* **Linguagem:** Python 3.10+
+* **Linguagem:** Python 3.11+
 * **Framework:** FastAPI
 * **IA:** Azure AI Foundry (Face API)
 * **Infra:** Azure Kubernetes Service (AKS) & Azure Container Registry (ACR)
 * **Provisionamento:** Terraform (IaC)
 * **CI/CD:** GitHub Actions
 * **Storage:** Azure Blob Storage
+* **Testes:** Pytest & Pytest-asyncio (QA Automatizado e Mocks)
+* **SDKs:** Azure SDK for Python (Face & Storage Blob)
+* **Containerização:** Docker
 
 ---
 
@@ -27,10 +30,12 @@ Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento 
 - [x] Provisionamento Automatizado via `terraform apply`.
 
 ### 2. Desenvolvimento do Microserviço
-- [ ] Setup do projeto FastAPI e dependências.
-- [ ] Implementação do Client da Face API.
-- [ ] Implementação do Upload para Blob Storage.
-- [ ] Documentação Swagger/OpenAPI.
+- [x] Setup do projeto FastAPI e dependências.
+- [x] Implementação do Client da Face API (SDK Oficial).
+- [x] Implementação do Upload para Blob Storage (Persistência).
+- [x] Lógica de filtragem (Boné, Óculos de Sol, Ângulo e Qualidade).
+- [x] Documentação Swagger/OpenAPI integrada.
+- [x] Implementação de Testes Unitários Automatizados (Pytest).
 
 ### 3. Containerização e Kubernetes
 - [ ] Criação do Dockerfile (Multi-stage build).
@@ -105,12 +110,77 @@ kubectl get nodes
 ---
 
 ## 🔑 Variáveis de Ambiente Críticas
-Os seguintes valores serão gerados pelo Terraform e devem ser usados na API:
-* **FACE_API_ENDPOINT:** Obtido via `terraform output FACE_API_ENDPOINT`
-* **FACE_API_KEY:** Obtido via `terraform output FACE_API_KEY`
-* **STORAGE_ACCOUNT_NAME:** Obtido via `terraform output STORAGE_ACCOUNT_NAME`
+Os seguintes valores são gerados pelo Terraform e configurados no arquivo `.env` (local) ou como *Secrets* (K8s):
+
+* **FACE_API_ENDPOINT:** URL da API de IA.
+* **FACE_API_KEY:** Chave de autenticação da Face API.
+* **STORAGE_ACCOUNT_NAME:** Nome da conta de armazenamento.
+* **STORAGE_CONTAINER_NAME:** Nome do container de destino (`validated-faces`).
+* **AZURE_STORAGE_CONNECTION_STRING:** String de conexão completa para persistência de dados.
+
+> **Dica:** Para extrair esses valores após o deploy da infra, utilize:
+> `terraform output -raw AZURE_STORAGE_CONNECTION_STRING`
 
 ---
 
+## 🔐 Configuração das Variáveis de Ambiente (.env)
+
+Após o provisionamento da infraestrutura (Etapa 1), você deve configurar as credenciais no seu ambiente local em um arquivo chamado **.env**. 
+
+### Criando o arquivo .env
+Crie um arquivo chamado **.env** na raiz do projeto e preencha com os valores obtidos acima:
+
+***env
+FACE_API_ENDPOINT=valor_obtido_no_terraform
+FACE_API_KEY=valor_obtido_no_terraform
+AZURE_STORAGE_CONNECTION_STRING=valor_obtido_no_terraform
+STORAGE_CONTAINER_NAME=validated-faces
+***
+
+***
+
+## 🛠️ Comandos de Execução Local
+
+Siga este fluxo no seu terminal para validar o microserviço:
+
+***bash
+# 1. Configurar o ambiente Python
+python -m venv venv
+
+# No Linux ou macOS
+source venv/bin/activate
+# No Windows (Prompt de Comando - CMD)
+venv\Scripts\activate
+# No Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+
+pip install -r requirements.txt
+
+# 2. Executar a suíte de testes (QA Automatizado)
+pytest -v
+
+# 3. Subir a API localmente
+uvicorn app.main:app --reload
+***
+
+***
+
+## 🧪 Plano de Testes de Qualidade (QA)
+
+O microserviço foi homologado e validado nos seguintes cenários:
+
+* **Foto Padrão:** Status 200 OK (Aprovado e Salvo na Azure).
+* **Uso de Boné:** Status 400 Bad Request (Bloqueado corretamente).
+* **Óculos de Sol:** Status 400 Bad Request (Bloqueado corretamente).
+* **Rosto de Perfil:** Status 400 Bad Request (Bloqueado por ângulo).
+* **Baixa Iluminação:** Status 400 Bad Request (Bloqueado por exposição).
+* **Óculos de Grau:** Status 200 OK (Permitido conforme regra de negócio).
+* **Ausência de Rosto:** Status 400 Bad Request (Bloqueado por ângulo).
+
+***
+
 ### ✅ Status da Etapa 1: Homologada via IaC
 Infraestrutura provisionada, modularizada e versionada com sucesso.
+
+### ✅ Status da Etapa 2: Concluída e Validada
+O microserviço está filtrando imagens com precisão e integrando perfeitamente com o Storage Account da Azure.

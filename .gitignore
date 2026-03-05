@@ -34,3 +34,5 @@ dist/
 # IDEs
 .vscode/
 .idea/
+
+test_images

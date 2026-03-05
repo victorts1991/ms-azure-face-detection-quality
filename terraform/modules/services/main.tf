@@ -27,3 +27,8 @@ resource "azurerm_storage_container" "photos" {
 output "face_endpoint" { value = azurerm_cognitive_account.face.endpoint }
 output "face_key"      { value = azurerm_cognitive_account.face.primary_access_key }
 output "storage_account_name" { value = azurerm_storage_account.st.name }
+output "storage_container_name" { value = azurerm_storage_container.photos.name }
+output "storage_connection_string" { 
+  value     = azurerm_storage_account.st.primary_connection_string 
+  sensitive = true
+}
