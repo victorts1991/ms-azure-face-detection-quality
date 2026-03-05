@@ -1,0 +1,138 @@
+name: 'Fase 4 - Full CI/CD'
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  changes:
+    name: '1. Detectar Alterações'
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.filter.outputs.terraform }}
+      k8s: ${{ steps.filter.outputs.k8s }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            terraform: ['terraform/**']
+            k8s: ['k8s/**']
+
+  setup-env:
+    name: '2. Auto-Discovery & Secrets'
+    runs-on: ubuntu-latest
+    outputs:
+      acr_name: ${{ steps.get_data.outputs.acr_name }}
+      acr_server: ${{ steps.get_data.outputs.acr_server }}
+      face_endpoint: ${{ steps.get_data.outputs.face_endpoint }}
+      face_key: ${{ steps.get_data.outputs.face_key }}
+      st_name: ${{ steps.get_data.outputs.st_name }}
+      st_conn: ${{ steps.get_data.outputs.st_conn }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get Resources Data
+        id: get_data
+        run: |
+          ACR_NAME=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
+          ACR_SERVER=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].loginServer" -o tsv | head -n 1)
+          ST_NAME=$(az storage account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
+          ST_CONN=$(az storage account show-connection-string --name $ST_NAME --query connectionString -o tsv)
+          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].name" -o tsv | head -n 1)
+          FACE_RG=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].resourceGroup" -o tsv | head -n 1)
+          FACE_ENDPOINT=$(az cognitiveservices account show --name $FACE_NAME --resource-group $FACE_RG --query properties.endpoint -o tsv)
+          FACE_KEY=$(az cognitiveservices account keys list --name $FACE_NAME --resource-group $FACE_RG --query key1 -o tsv)
+
+          echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
+          echo "acr_server=$ACR_SERVER" >> $GITHUB_OUTPUT
+          echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT
+          echo "face_key=$FACE_KEY" >> $GITHUB_OUTPUT
+          echo "st_name=$ST_NAME" >> $GITHUB_OUTPUT
+          echo "st_conn=$ST_CONN" >> $GITHUB_OUTPUT
+
+  terraform:
+    name: '3. Infraestrutura'
+    needs: [changes, setup-env]
+    if: needs.changes.outputs.terraform == 'true' || github.run_number == 1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve
+
+  ci-qa-build:
+    name: '4. CI: QA & Docker Build'
+    needs: [setup-env, terraform]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: QA: Lint & Testes
+        run: |
+          pip install flake8 pytest pytest-asyncio httpx -r requirements.txt
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          pytest
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build and Push
+        run: |
+          ACR_SERVER=${{ needs.setup-env.outputs.acr_server }}
+          az acr login --name ${{ needs.setup-env.outputs.acr_name }}
+          
+          docker build -t $ACR_SERVER/face-detection-quality:latest .
+          docker push $ACR_SERVER/face-detection-quality:latest
+
+  cd-deploy:
+    name: '5. CD: Deploy AKS'
+    needs: [changes, setup-env, ci-qa-build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Set AKS Context
+        uses: azure/aks-set-context@v3
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: "rg-${{ secrets.PREFIX }}-prod"
+          cluster-name: "${{ secrets.PREFIX }}-aks"
+      - name: Sync K8s Secrets
+        run: |
+          kubectl create secret generic face-api-secrets \
+            --from-literal=FACE_API_ENDPOINT="${{ needs.setup-env.outputs.face_endpoint }}" \
+            --from-literal=FACE_API_KEY="${{ needs.setup-env.outputs.face_key }}" \
+            --from-literal=STORAGE_ACCOUNT_NAME="${{ needs.setup-env.outputs.st_name }}" \
+            --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
+            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${{ needs.setup-env.outputs.st_conn }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Prepare and Apply Manifests
+        run: |
+          export ACR_LOGIN_SERVER=${{ needs.setup-env.outputs.acr_server }}
+          envsubst < k8s/deployment.yaml | kubectl apply -f -
+          kubectl apply -f k8s/service.yaml
+      - name: Force Rollout
+        run: |
+          kubectl rollout restart deployment face-quality-api
+          kubectl rollout status deployment face-quality-api

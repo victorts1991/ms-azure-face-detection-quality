@@ -8,7 +8,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "rg-terraform-state"
-    storage_account_name = "stfacequalitytfb814a9"
+    storage_account_name = "stfacequalitytf2f84c6"
     container_name       = "tfstate"
     key                  = "face-quality.terraform.tfstate"
   }
@@ -20,7 +20,7 @@ provider "azurerm" {
 
 # Grupo de Recursos Principal
 resource "azurerm_resource_group" "main" {
-  name     = var.resource_group_name
+  name     = "rg-${var.prefix}-prod"
   location = var.location
 }
 
@@ -41,3 +41,4 @@ module "cluster" {
   prefix              = var.prefix
   suffix              = var.suffix
 }
+

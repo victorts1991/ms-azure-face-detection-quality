@@ -23,3 +23,11 @@ output "STORAGE_CONTAINER_NAME" {
 output "ACR_LOGIN_SERVER" {
   value = module.cluster.acr_login_server
 }
+
+output "acr_name" {
+  value = module.services.acr_name 
+}
+
+output "aks_cluster_name" {
+  value = "facequality-aks"
+}
