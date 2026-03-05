@@ -38,9 +38,9 @@ Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento 
 - [x] Implementação de Testes Unitários Automatizados (Pytest).
 
 ### 3. Containerização e Kubernetes
-- [ ] Criação do Dockerfile (Multi-stage build).
-- [ ] Manifestos K8s (Deployment, Service LoadBalancer).
-- [ ] Configuração de Segredos (Secrets) no Cluster.
+- [X] Criação do Dockerfile (Multi-stage build).
+- [X] Manifestos K8s (Deployment, Service LoadBalancer).
+- [X] Configuração de Segredos (Secrets) no Cluster.
 
 ### 4. Automação Full CI/CD (GitHub Actions)
 - [ ] Pipeline de **Integração Contínua (CI)**: Lint, Testes Unitários e Build/Push da imagem Docker para o ACR.
@@ -173,8 +173,53 @@ O microserviço foi homologado e validado nos seguintes cenários:
 * **Óculos de Grau:** Status 200 OK (Permitido conforme regra de negócio).
 * **Ausência de Rosto:** Status 400 Bad Request (Bloqueado por ângulo).
 
-### ✅ Status da Etapa 1: Homologada via IaC
-Infraestrutura provisionada, modularizada e versionada com sucesso.
+### 📦 3. Containerização e Kubernetes (Deploy em Nuvem)
 
-### ✅ Status da Etapa 2: Concluída e Validada
-O microserviço está filtrando imagens com precisão e integrando perfeitamente com o Storage Account da Azure.
+Esta etapa detalha como empacotar o microserviço e realizar o deploy manual no cluster **AKS**.
+
+#### A. Preparação da Imagem Docker
+Primeiro, é necessário capturar o endereço do seu Registro de Containers (ACR) e realizar o build da imagem local:
+
+```bash
+export ACR_LOGIN_SERVER=$(terraform -chdir=terraform output -raw ACR_LOGIN_SERVER)
+
+docker build -t $ACR_LOGIN_SERVER/face-detection-quality:latest .
+
+docker push $ACR_LOGIN_SERVER/face-detection-quality:latest
+```
+
+#### B. Configuração de Segredos (Secrets) no Cluster
+O Kubernetes precisa das credenciais da Azure para funcionar. O comando abaixo captura os outputs do Terraform e cria a Secret no AKS de forma segura:
+
+```bash
+export K_ENDPOINT=$(terraform -chdir=terraform output -raw FACE_API_ENDPOINT) && \
+export K_KEY=$(terraform -chdir=terraform output -raw FACE_API_KEY) && \
+export K_ST_NAME=$(terraform -chdir=terraform output -raw STORAGE_ACCOUNT_NAME) && \
+export K_ST_CONT=$(terraform -chdir=terraform output -raw STORAGE_CONTAINER_NAME) && \
+export K_ST_CONN=$(terraform -chdir=terraform output -raw STORAGE_CONNECTION_STRING)
+
+kubectl create secret generic face-api-secrets \
+  --from-literal=FACE_API_ENDPOINT="$K_ENDPOINT" \
+  --from-literal=FACE_API_KEY="$K_KEY" \
+  --from-literal=STORAGE_ACCOUNT_NAME="$K_ST_NAME" \
+  --from-literal=STORAGE_CONTAINER_NAME="$K_ST_CONT" \
+  --from-literal=AZURE_STORAGE_CONNECTION_STRING="$K_ST_CONN"
+```
+
+#### C. Deploy dos Manifestos
+Utilizamos o utilitário **envsubst** para injetar dinamicamente o nome do ACR no manifesto de deployment, garantindo portabilidade entre diferentes ambientes:
+
+```bash
+envsubst < k8s/deployment.yaml | kubectl apply -f -
+
+kubectl apply -f k8s/service.yaml
+```
+
+#### D. Verificação do Status e Acesso
+Após o deploy, acompanhe a criação do IP público para realizar os testes através do IP listado em **EXTERNAL-IP**:
+
+kubectl get pods
+
+kubectl get service face-quality-service --watch
+
+---
