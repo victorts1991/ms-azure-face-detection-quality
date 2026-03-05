@@ -1,4 +1,4 @@
-name: 'CI/CD'
+name: 'Full CI/CD'
 
 on:
   push:
@@ -19,9 +19,31 @@ jobs:
           filters: |
             terraform: ['terraform/**']
             k8s: ['k8s/**']
+  
+  terraform:
+    name: '2. Infraestrutura'
+    needs: [changes]
+    if: needs.changes.outputs.terraform == 'true' || github.run_number == 1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve
 
   setup-env:
-    name: '2. Auto-Discovery & Secrets'
+    name: '3. Auto-Discovery & Secrets'
+    needs: [terraform]
+    # Garante que roda mesmo que o terraform seja 'skipped' (quando não há mudanças na infra)
+    if: always() && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
       acr_name: ${{ steps.get_data.outputs.acr_name }}
@@ -39,49 +61,21 @@ jobs:
       - name: Get Resources Data
         id: get_data
         run: |
-          # 1. Busca ACR e Storage pelo PREFIX (garantindo que pegamos o primeiro)
           ACR_NAME=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ACR_SERVER=$(az acr list --query "[?name=='$ACR_NAME'].loginServer" -o tsv)
-          
+          ACR_SERVER=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].loginServer" -o tsv | head -n 1)
           ST_NAME=$(az storage account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ST_CONN=$(az storage account show-connection-string --name "$ST_NAME" --query connectionString -o tsv)
-          
-          # 2. Busca Face API usando o padrão do Terraform (prefix-ai-face)
-          # Se não achar pelo prefixo, tenta pelo 'face' genérico
-          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          
-          # Pega o Resource Group dinamicamente para não dar erro de 'não encontrado'
-          FACE_RG=$(az cognitiveservices account list --query "[?name=='$FACE_NAME'].resourceGroup" -o tsv)
-          
-          FACE_ENDPOINT=$(az cognitiveservices account show --name "$FACE_NAME" --resource-group "$FACE_RG" --query properties.endpoint -o tsv)
-          FACE_KEY=$(az cognitiveservices account keys list --name "$FACE_NAME" --resource-group "$FACE_RG" --query key1 -o tsv)
+          ST_CONN=$(az storage account show-connection-string --name $ST_NAME --query connectionString -o tsv)
+          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].name" -o tsv | head -n 1)
+          FACE_RG=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].resourceGroup" -o tsv | head -n 1)
+          FACE_ENDPOINT=$(az cognitiveservices account show --name $FACE_NAME --resource-group $FACE_RG --query properties.endpoint -o tsv)
+          FACE_KEY=$(az cognitiveservices account keys list --name $FACE_NAME --resource-group $FACE_RG --query key1 -o tsv)
 
-          # 3. Exporta tudo
           echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
           echo "acr_server=$ACR_SERVER" >> $GITHUB_OUTPUT
           echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT
           echo "face_key=$FACE_KEY" >> $GITHUB_OUTPUT
           echo "st_name=$ST_NAME" >> $GITHUB_OUTPUT
           echo "st_conn=$ST_CONN" >> $GITHUB_OUTPUT
-
-  terraform:
-    name: '3. Infraestrutura'
-    needs: [changes, setup-env]
-    if: needs.changes.outputs.terraform == 'true' || github.run_number == 1
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-      - name: Terraform Apply
-        working-directory: ./terraform
-        run: |
-          terraform init
-          terraform apply -auto-approve
 
   ci-qa-build:
     name: '4. CI: QA & Docker Build'
@@ -94,7 +88,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Lint & Testes
+      - name: QA: Lint & Testes
         run: |
           pip install flake8 pytest pytest-asyncio httpx -r requirements.txt
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -107,7 +101,6 @@ jobs:
         run: |
           ACR_SERVER=${{ needs.setup-env.outputs.acr_server }}
           az acr login --name ${{ needs.setup-env.outputs.acr_name }}
-          
           docker build -t $ACR_SERVER/face-detection-quality:latest .
           docker push $ACR_SERVER/face-detection-quality:latest
 
@@ -117,6 +110,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Azure Login
         uses: azure/login@v1
         with:
