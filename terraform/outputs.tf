@@ -25,7 +25,7 @@ output "ACR_LOGIN_SERVER" {
 }
 
 output "acr_name" {
-  value = module.services.acr_name 
+  value = module.cluster.acr_name
 }
 
 output "aks_cluster_name" {
