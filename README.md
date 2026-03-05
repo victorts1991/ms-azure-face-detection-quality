@@ -223,3 +223,43 @@ kubectl get pods
 kubectl get service face-quality-service --watch
 
 ---
+
+
+
+
+Validar depois :
+
+
+
+# 🚀 Guia de Setup: Zero Absoluto (Azure CI/CD)
+
+Este guia descreve os passos necessários para provisionar a infraestrutura e realizar o deploy automatizado via GitHub Actions partindo do zero.
+
+## 1. Preparação do Ambiente (Bootstrap)
+Antes de iniciar o pipeline, execute o script de bootstrap na sua máquina local. Você deve estar logado no Azure CLI com uma conta que possua permissão de **Owner** na assinatura.
+
+* **Comando:** `chmod +x bootstrap.sh && ./bootstrap.sh`
+* **O que ele faz:**
+    * Cria o **Resource Group** para o estado do Terraform (`rg-terraform-state`).
+    * Cria a **Storage Account** com nome único para armazenar o arquivo `.tfstate`.
+    * Cria o **Service Principal** (Identidade) que o GitHub Actions utilizará.
+    * Eleva a permissão do Service Principal para **User Access Administrator**, permitindo que o Terraform configure o acesso entre o AKS e o ACR (AcrPull) automaticamente.
+
+
+
+## 2. Configuração de Secrets no GitHub
+No repositório do GitHub, acesse **Settings > Secrets and variables > Actions** e adicione as seguintes chaves:
+
+* **AZURE_CREDENTIALS:** Cole o JSON completo gerado no final da execução do script de bootstrap.
+* **PREFIX:** O nome base definido para os recursos (ex: `facequality`).
+
+## 3. Sincronização do Terraform
+No arquivo `main.tf` do seu projeto, localize o bloco de configuração do **backend** e atualize o nome da Storage Account:
+
+* **storage_account_name:** Utilize o nome exato impresso pelo script de bootstrap (ex: `stfacequalitytf2ae3ab`).
+
+## ⚠️ Notas de Resiliência (Troubleshooting)
+
+* **Conflito de Soft-Delete (Face API):** A Azure mantém recursos de Cognitive Services em uma "lixeira" por 48h após a exclusão. Se o Terraform falhar com erro 409 (Conflict), basta alterar o nome do recurso no código (ex: de `facequality-ai-face` para `facequality-ai-face2`) e realizar um novo push.
+* **Propagação de DNS do AKS:** No primeiro deploy, o comando `kubectl` pode falhar com erro `no such host`. Isso ocorre porque o DNS do cluster ainda está propagando. O pipeline possui um `sleep` de segurança, mas se falhar, basta clicar em **Re-run failed jobs**.
+* **Bloqueio de Permissão (RBAC):** Caso o Terraform apresente erro de `AuthorizationFailed` ao tentar criar o Role Assignment, certifique-se de que o Service Principal recebeu corretamente a permissão de administrador no passo de bootstrap.
