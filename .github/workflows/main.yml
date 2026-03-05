@@ -121,6 +121,8 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: "rg-${{ secrets.PREFIX }}-prod"
           cluster-name: "${{ secrets.PREFIX }}-aks"
+      - name: Wait for AKS DNS
+        run: sleep 30
       - name: Sync K8s Secrets
         run: |
           kubectl create secret generic face-api-secrets \
