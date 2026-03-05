@@ -130,20 +130,18 @@ Após o provisionamento da infraestrutura (Etapa 1), você deve configurar as cr
 ### Criando o arquivo .env
 Crie um arquivo chamado **.env** na raiz do projeto e preencha com os valores obtidos acima:
 
-***env
+```env
 FACE_API_ENDPOINT=valor_obtido_no_terraform
 FACE_API_KEY=valor_obtido_no_terraform
 AZURE_STORAGE_CONNECTION_STRING=valor_obtido_no_terraform
 STORAGE_CONTAINER_NAME=validated-faces
-***
-
-***
+```
 
 ## 🛠️ Comandos de Execução Local
 
 Siga este fluxo no seu terminal para validar o microserviço:
 
-***bash
+```bash
 # 1. Configurar o ambiente Python
 python -m venv venv
 
@@ -161,9 +159,7 @@ pytest -v
 
 # 3. Subir a API localmente
 uvicorn app.main:app --reload
-***
-
-***
+```
 
 ## 🧪 Plano de Testes de Qualidade (QA)
 
@@ -176,8 +172,6 @@ O microserviço foi homologado e validado nos seguintes cenários:
 * **Baixa Iluminação:** Status 400 Bad Request (Bloqueado por exposição).
 * **Óculos de Grau:** Status 200 OK (Permitido conforme regra de negócio).
 * **Ausência de Rosto:** Status 400 Bad Request (Bloqueado por ângulo).
-
-***
 
 ### ✅ Status da Etapa 1: Homologada via IaC
 Infraestrutura provisionada, modularizada e versionada com sucesso.
