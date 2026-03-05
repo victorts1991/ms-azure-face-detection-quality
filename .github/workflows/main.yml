@@ -1,4 +1,4 @@
-name: 'Fase 4 - Full CI/CD'
+name: 'CI/CD'
 
 on:
   push:
@@ -39,15 +39,24 @@ jobs:
       - name: Get Resources Data
         id: get_data
         run: |
+          # 1. Busca ACR e Storage pelo PREFIX (garantindo que pegamos o primeiro)
           ACR_NAME=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ACR_SERVER=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].loginServer" -o tsv | head -n 1)
+          ACR_SERVER=$(az acr list --query "[?name=='$ACR_NAME'].loginServer" -o tsv)
+          
           ST_NAME=$(az storage account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ST_CONN=$(az storage account show-connection-string --name $ST_NAME --query connectionString -o tsv)
-          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].name" -o tsv | head -n 1)
-          FACE_RG=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].resourceGroup" -o tsv | head -n 1)
-          FACE_ENDPOINT=$(az cognitiveservices account show --name $FACE_NAME --resource-group $FACE_RG --query properties.endpoint -o tsv)
-          FACE_KEY=$(az cognitiveservices account keys list --name $FACE_NAME --resource-group $FACE_RG --query key1 -o tsv)
+          ST_CONN=$(az storage account show-connection-string --name "$ST_NAME" --query connectionString -o tsv)
+          
+          # 2. Busca Face API usando o padrão do Terraform (prefix-ai-face)
+          # Se não achar pelo prefixo, tenta pelo 'face' genérico
+          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
+          
+          # Pega o Resource Group dinamicamente para não dar erro de 'não encontrado'
+          FACE_RG=$(az cognitiveservices account list --query "[?name=='$FACE_NAME'].resourceGroup" -o tsv)
+          
+          FACE_ENDPOINT=$(az cognitiveservices account show --name "$FACE_NAME" --resource-group "$FACE_RG" --query properties.endpoint -o tsv)
+          FACE_KEY=$(az cognitiveservices account keys list --name "$FACE_NAME" --resource-group "$FACE_RG" --query key1 -o tsv)
 
+          # 3. Exporta tudo
           echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
           echo "acr_server=$ACR_SERVER" >> $GITHUB_OUTPUT
           echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT
