@@ -8,7 +8,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "rg-terraform-state"
-    storage_account_name = "stfacequalitytf2f84c6"
+    storage_account_name = "stfacequalitytf2ae3ab"
     container_name       = "tfstate"
     key                  = "face-quality.terraform.tfstate"
   }
@@ -42,4 +42,4 @@ module "cluster" {
   suffix              = var.suffix
 }
 
-# first commit
+# test commit: 1
