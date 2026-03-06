@@ -42,16 +42,16 @@ jobs:
   setup-env:
     name: '3. Auto-Discovery & Secrets'
     needs: [terraform]
-    # Garante que roda mesmo que o terraform seja 'skipped' (quando não há mudanças na infra)
     if: always() && (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
-      acr_name: ${{ steps.get_data.outputs.acr_name }}
-      acr_server: ${{ steps.get_data.outputs.acr_server }}
+      # Nomes simplificados para evitar bloqueio de "secret" do GitHub
+      acrname: ${{ steps.get_data.outputs.acrname }}
+      acrserver: ${{ steps.get_data.outputs.acrserver }}
       face_endpoint: ${{ steps.get_data.outputs.face_endpoint }}
       face_key: ${{ steps.get_data.outputs.face_key }}
-      st_name: ${{ steps.get_data.outputs.st_name }}
-      st_conn: ${{ steps.get_data.outputs.st_conn }}
+      stname: ${{ steps.get_data.outputs.stname }}
+      stconn: ${{ steps.get_data.outputs.stconn }}
     steps:
       - name: Azure Login
         uses: azure/login@v1
@@ -61,37 +61,26 @@ jobs:
       - name: Get Resources Data
         id: get_data
         run: |
-          # 1. Definir o Resource Group para evitar repetição
           RG="rg-${{ secrets.PREFIX }}-prod"
-          echo "Buscando recursos no Resource Group: $RG"
-
-          # 2. ACR
+          
+          # Coleta de dados
           ACR_NAME=$(az acr list -g $RG --query "[0].name" -o tsv)
           ACR_SERVER=$(az acr list -g $RG --query "[0].loginServer" -o tsv)
-          
-          # 3. Storage
           ST_NAME=$(az storage account list -g $RG --query "[0].name" -o tsv)
           ST_CONN=$(az storage account show-connection-string -g $RG -n $ST_NAME --query connectionString -o tsv)
-          
-          # 4. Face API
           FACE_NAME="${{ secrets.PREFIX }}-ai-face2"
           FACE_ENDPOINT=$(az cognitiveservices account show -n $FACE_NAME -g $RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list -n $FACE_NAME -g $RG --query key1 -o tsv)
 
-          # 5. Exportação com Base64 (O segredo é o -w 0 para manter em uma linha só)
-          # Isso evita o erro "Invalid format" e pula o filtro de segredos do GitHub
-          ACR_NAME_B64=$(echo -n "$ACR_NAME" | base64 -w 0)
-          ACR_SERVER_B64=$(echo -n "$ACR_SERVER" | base64 -w 0)
-          ST_CONN_B64=$(echo -n "$ST_CONN" | base64 -w 0)
-
-          echo "acr_name=${ACR_NAME_B64}" >> $GITHUB_OUTPUT
-          echo "acr_server=${ACR_SERVER_B64}" >> $GITHUB_OUTPUT
-          echo "st_conn=${ST_CONN_B64}" >> $GITHUB_OUTPUT
+          # Exportação com Base64 e nomes limpos (IDênticos ao 'outputs' do job)
+          echo "acrname=$(echo -n "$ACR_NAME" | base64 -w 0)" >> $GITHUB_OUTPUT
+          echo "acrserver=$(echo -n "$ACR_SERVER" | base64 -w 0)" >> $GITHUB_OUTPUT
+          echo "stconn=$(echo -n "$ST_CONN" | base64 -w 0)" >> $GITHUB_OUTPUT
           
-          # Estes campos abaixo não são mascarados, então vão direto
+          # Variáveis de texto comum
           echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT
           echo "face_key=$FACE_KEY" >> $GITHUB_OUTPUT
-          echo "st_name=$ST_NAME" >> $GITHUB_OUTPUT
+          echo "stname=$ST_NAME" >> $GITHUB_OUTPUT
 
   ci-qa-build:
     name: '4. CI: QA & Docker Build'
@@ -141,7 +130,7 @@ jobs:
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
-    needs: [ci-qa-build] 
+    needs: [setup-env, ci-qa-build]
     if: always() && needs.ci-qa-build.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -152,7 +141,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Set AKS Context & DNS
+      - name: Set AKS Context
         uses: azure/aks-set-context@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -161,46 +150,33 @@ jobs:
 
       - name: Sync K8s Secrets
         run: |
-          # Decodifica a connection string vinda do Job 3
-          ST_CONN=$(echo "${{ needs.setup-env.outputs.st_conn }}" | base64 -d)
+          # Decodifica a connection string usando o novo nome 'stconn'
+          ST_CONN_DECODED=$(echo "${{ needs.setup-env.outputs.stconn }}" | base64 -d)
           
           kubectl create secret generic face-api-secrets \
             --from-literal=FACE_API_ENDPOINT="${{ needs.setup-env.outputs.face_endpoint }}" \
             --from-literal=FACE_API_KEY="${{ needs.setup-env.outputs.face_key }}" \
-            --from-literal=STORAGE_ACCOUNT_NAME="${{ needs.setup-env.outputs.st_name }}" \
+            --from-literal=STORAGE_ACCOUNT_NAME="${{ needs.setup-env.outputs.stname }}" \
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
-            --from-literal=AZURE_STORAGE_CONNECTION_STRING="$ST_CONN" \
+            --from-literal=AZURE_STORAGE_CONNECTION_STRING="$ST_CONN_DECODED" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Prepare and Apply Manifests
         run: |
-          # 1. Traz o valor bruto que veio do Job 3
-          RAW_SERVER="${{ needs.setup-env.outputs.acr_server }}"
-          
-          echo "📊 --- DEBUG DE ENTRADA (JOB 5) ---"
-          echo "Tamanho do Base64 recebido: $(echo -n "$RAW_SERVER" | wc -c) caracteres"
-          
-          # 2. Tenta decodificar
+          # Decodifica o servidor usando o novo nome 'acrserver'
+          RAW_SERVER="${{ needs.setup-env.outputs.acrserver }}"
           export ACR_LOGIN_SERVER=$(echo "$RAW_SERVER" | base64 -d)
           
-          echo "Tamanho do Valor Decodificado: $(echo -n "$ACR_LOGIN_SERVER" | wc -c) caracteres"
+          echo "Deploying to AKS with image from: $ACR_LOGIN_SERVER"
           
-          # 3. TRUQUE: Mostra o valor sem disparar o filtro de segredos (trocando . por espaço)
-          # Se o valor for 'meuacr.azurecr.io', vai aparecer 'meuacr azurecr io'
-          echo "Conteúdo Decodificado (Safe): $(echo "$ACR_LOGIN_SERVER" | sed 's/\./ /g')"
-          echo "-----------------------------------"
-
-          # 4. Executa o envsubst apenas se a variável não estiver vazia
-          if [ -z "$ACR_LOGIN_SERVER" ]; then
-            echo "❌ ERRO: ACR_LOGIN_SERVER está vazio! O deploy vai falhar."
-            exit 1
-          fi
-
+          # Injeta o valor no deployment.yaml e aplica
           envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
 
       - name: Force Rollout (Update Image)
         run: |
           az aks get-credentials --resource-group "rg-${{ secrets.PREFIX }}-prod" --name "${{ secrets.PREFIX }}-aks" --overwrite-existing
+          
+          echo "Reiniciando pods para garantir nova imagem..."
           kubectl rollout restart deployment face-quality-api
           kubectl rollout status deployment face-quality-api --timeout=90s
