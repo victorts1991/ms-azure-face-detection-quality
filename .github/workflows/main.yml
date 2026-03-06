@@ -119,14 +119,19 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           
       - name: Build and Push
+        env:
+          ACR_NAME: ${{ needs.setup-env.outputs.acr_name }}
+          ACR_SERVER: ${{ needs.setup-env.outputs.acr_server }}
         run: |
-          # Extraindo outputs para variáveis locais com segurança
-          SERVER="${{ needs.setup-env.outputs.acr_server }}"
-          NAME="${{ needs.setup-env.outputs.acr_name }}"
+          # Agora o shell consegue ler $ACR_NAME e $ACR_SERVER
+          echo "Fazendo login no ACR: $ACR_NAME"
+          az acr login --name "$ACR_NAME"
           
-          az acr login --name "$NAME"
-          docker build -t "$SERVER/face-detection-quality:latest" .
-          docker push "$SERVER/face-detection-quality:latest"
+          echo "Buildando imagem..."
+          docker build -t "$ACR_SERVER/face-detection-quality:latest" .
+          
+          echo "Fazendo push..."
+          docker push "$ACR_SERVER/face-detection-quality:latest"
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
