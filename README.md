@@ -228,7 +228,7 @@ kubectl create secret generic face-api-secrets \
   --from-literal=STORAGE_ACCOUNT_NAME="$K_ST_NAME" \
   --from-literal=STORAGE_CONTAINER_NAME="$K_ST_CONT" \
   --from-literal=STORAGE_CONNECTION_STRING="$K_ST_CONN"
-  
+
 ```
 
 #### C. Deploy dos Manifestos
@@ -281,12 +281,6 @@ Abra o arquivo **terraform/main.tf** e localize o bloco identificado como **back
 
 ## 4. Executando o Pipeline
 Com as configurações acima realizadas, o deploy torna-se automático. Basta realizar um **git push** para a branch **main** e observar o progresso na aba **Actions** do seu repositório.
-
-### O que o Pipeline faz automaticamente:
-* **Infraestrutura:** O Terraform valida e aplica as mudanças necessárias na Azure (criação de AKS, ACR, Face API e Storage).
-* **Auto-Discovery:** O Job de configuração busca dinamicamente os nomes dos recursos e chaves gerados, eliminando a necessidade de configuração manual de endpoints.
-* **QA & Build:** O sistema executa a suíte de testes unitários com Pytest e, se aprovada, gera a imagem Docker e a envia para o seu registro privado (ACR).
-* **Deploy Idempotente:** O pipeline sincroniza os segredos no Kubernetes e realiza o reinício controlado (rollout) da aplicação para aplicar a nova versão sem quedas.
 
 ## 🔍 Monitorando o Deploy após a conclusão
 Após o pipeline finalizar, você pode validar a saúde da aplicação diretamente pelo seu terminal:

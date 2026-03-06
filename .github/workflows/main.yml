@@ -69,7 +69,7 @@ jobs:
           ACR_SERVER=$(az acr list -g $RG --query "[0].loginServer" -o tsv)
           ST_NAME=$(az storage account list -g $RG --query "[0].name" -o tsv)
           ST_CONN=$(az storage account show-connection-string -g $RG -n $ST_NAME --query connectionString -o tsv)
-          FACE_NAME="${{ secrets.PREFIX }}-ai-face2"
+          FACE_NAME="${{ secrets.PREFIX }}-ai-face4"
           FACE_ENDPOINT=$(az cognitiveservices account show -n $FACE_NAME -g $RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list -n $FACE_NAME -g $RG --query key1 -o tsv)
 
