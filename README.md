@@ -12,7 +12,7 @@ O projeto visa garantir que fotos de rostos enviadas para sistemas de identidade
 ## 🛠️ Stack Tecnológica
 * **Linguagem:** Python 3.11+
 * **Framework:** FastAPI
-* **IA:** Azure AI Foundry (Face API)
+* **IA:** Azure AI Foundry (Azure AI Face API)
 * **Infra:** Azure Kubernetes Service (AKS) & Azure Container Registry (ACR)
 * **Provisionamento:** Terraform (IaC)
 * **CI/CD:** GitHub Actions (Estratégia de Artifact Sharing)
