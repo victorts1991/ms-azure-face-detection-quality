@@ -63,30 +63,21 @@ jobs:
         run: |
           # 1. Definir o Resource Group para evitar repetição
           RG="rg-${{ secrets.PREFIX }}-prod"
-          echo "🔍 Buscando recursos no Resource Group: $RG"
 
           # 2. ACR
           ACR_NAME=$(az acr list -g $RG --query "[0].name" -o tsv)
           ACR_SERVER=$(az acr list -g $RG --query "[0].loginServer" -o tsv)
-          echo "✅ ACR Name: $ACR_NAME"
-          echo "✅ ACR Server: $ACR_SERVER"
           
           # 3. Storage - Aqui está o provável erro
           ST_NAME=$(az storage account list -g $RG --query "[0].name" -o tsv)
-          echo "✅ Storage Name: $ST_NAME"
           
           ST_CONN=$(az storage account show-connection-string -g $RG -n $ST_NAME --query connectionString -o tsv)
-          # O echo abaixo vai mostrar *** se tiver valor, ou vazio se falhar
-          echo "✅ Storage Conn String: $ST_CONN"
           
           # 4. Face API (Lembrando do nome face2 que você mudou)
           FACE_NAME="${{ secrets.PREFIX }}-ai-face2"
-          echo "🔍 Buscando Face API: $FACE_NAME"
           
           FACE_ENDPOINT=$(az cognitiveservices account show -n $FACE_NAME -g $RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list -n $FACE_NAME -g $RG --query key1 -o tsv)
-          echo "✅ Face Endpoint: $FACE_ENDPOINT"
-          echo "✅ Face Key: $FACE_KEY"
 
           # 5. Exportação para o GitHub Actions
           echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
@@ -129,16 +120,17 @@ jobs:
           
       - name: Build and Push
         run: |
-          ACR_SERVER=${{ needs.setup-env.outputs.acr_server }}
-          az acr login --name ${{ needs.setup-env.outputs.acr_name }}
-          # O Dockerfile está na raiz, mas o contexto de build inclui a pasta app
-          docker build -t $ACR_SERVER/face-detection-quality:latest .
-          docker push $ACR_SERVER/face-detection-quality:latest
+          # Extraindo outputs para variáveis locais com segurança
+          SERVER="${{ needs.setup-env.outputs.acr_server }}"
+          NAME="${{ needs.setup-env.outputs.acr_name }}"
+          
+          az acr login --name "$NAME"
+          docker build -t "$SERVER/face-detection-quality:latest" .
+          docker push "$SERVER/face-detection-quality:latest"
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
-    needs: [changes, setup-env, ci-qa-build]
-    # Roda se o Build da imagem teve sucesso (independente do Terraform ter pulado)
+    needs: [ci-qa-build]
     if: always() && needs.ci-qa-build.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -149,7 +141,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # --- BLOCO K8S: Só roda se houve mudança na pasta k8s ---
       - name: Set AKS Context & DNS
         if: needs.changes.outputs.k8s == 'true'
         uses: azure/aks-set-context@v3
@@ -172,16 +163,15 @@ jobs:
       - name: Prepare and Apply Manifests
         if: needs.changes.outputs.k8s == 'true'
         run: |
-          export ACR_LOGIN_SERVER=${{ needs.setup-env.outputs.acr_server }}
+          export ACR_LOGIN_SERVER="${{ needs.setup-env.outputs.acr_server }}"
           envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
 
-      # --- BLOCO FINAL: Roda SEMPRE após o Step 4 ---
       - name: Force Rollout (Update Image)
         run: |
-          # Garante o contexto caso o bloco acima tenha sido pulado
-          az aks get-credentials --resource-group rg-${{ secrets.PREFIX }}-prod --name ${{ secrets.PREFIX }}-aks --overwrite-existing
+          # Garante o contexto para o restart
+          az aks get-credentials --resource-group "rg-${{ secrets.PREFIX }}-prod" --name "${{ secrets.PREFIX }}-aks" --overwrite-existing
           
-          echo "🔄 Reiniciando pods para aplicar nova imagem do Step 4..."
+          echo "🔄 Reiniciando pods..."
           kubectl rollout restart deployment face-quality-api
-          kubectl rollout status deployment face-quality-api --timeout=60s
+          kubectl rollout status deployment face-quality-api --timeout=90s
