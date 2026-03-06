@@ -85,8 +85,8 @@ jobs:
 
   ci-qa-build:
     name: '4. CI: QA & Docker Build'
-    needs: [setup-env, terraform]
-    if: always()
+    needs: [setup-env]
+    if: success()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,9 +94,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      
       - name: Lint & Testes
         env:
-          # Injeta as variáveis para o Pydantic utilizar durante os testes, garantindo que o ambiente de teste seja o mais próximo possível do real
+          # Injeção direta das saídas do Job 3
           FACE_API_ENDPOINT: ${{ needs.setup-env.outputs.face_endpoint }}
           FACE_API_KEY: ${{ needs.setup-env.outputs.face_key }}
           STORAGE_ACCOUNT_NAME: ${{ needs.setup-env.outputs.st_name }}
@@ -104,25 +105,32 @@ jobs:
           AZURE_STORAGE_CONNECTION_STRING: ${{ needs.setup-env.outputs.st_conn }}
         run: |
           pip install flake8 pytest pytest-asyncio httpx -r app/requirements.txt
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # PYTHONPATH garante que o pytest enxergue a pasta app
+          flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
+          
+          # Garante que o Python encontre o código dentro de /app
           export PYTHONPATH=$PYTHONPATH:$(pwd)/app
+          
+          # Executa o teste
           pytest
+      
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
       - name: Build and Push
         run: |
           ACR_SERVER=${{ needs.setup-env.outputs.acr_server }}
           az acr login --name ${{ needs.setup-env.outputs.acr_name }}
+          # O Dockerfile está na raiz, mas o contexto de build inclui a pasta app
           docker build -t $ACR_SERVER/face-detection-quality:latest .
           docker push $ACR_SERVER/face-detection-quality:latest
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
-    needs: [changes, setup-env, ci-qa-build]
-    if: always()
+    needs: [ci-qa-build]
+    # MUDANÇA CRUCIAL: success() faz o pipeline parar se o teste ou build falharem
+    if: success() 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -155,4 +163,5 @@ jobs:
       - name: Force Rollout
         run: |
           kubectl rollout restart deployment face-quality-api
-          kubectl rollout status deployment face-quality-api
+          # Este comando abaixo é o que travava 6h se o container estivesse quebrado
+          kubectl rollout status deployment face-quality-api --timeout=60s
