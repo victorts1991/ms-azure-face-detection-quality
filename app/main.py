@@ -7,9 +7,12 @@ from azure.core.exceptions import AzureError
 
 app = FastAPI(title="MS Azure Face Detection Quality")
 
-# Instanciando os serviços
-face_ai = FaceService()
-storage = StorageService()
+# Use funções para obter os serviços (Lazy Instantiation)
+def get_face_service():
+    return FaceService()
+
+def get_storage_service():
+    return StorageService()
 
 @app.get("/health")
 def health():
@@ -21,6 +24,11 @@ def health():
         responses={400: {"model": FaceValidationError}, 502: {"model": StorageError}}
 )
 async def analyze_face(file: UploadFile = File(...)):
+
+    # Instancia apenas quando o endpoint é chamado
+    face_ai = get_face_service()
+    storage = get_storage_service()
+
     content = await file.read()
     
     # 1. Validação com a Face API

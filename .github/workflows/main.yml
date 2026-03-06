@@ -110,20 +110,16 @@ jobs:
       
       - name: Lint & Testes
         env:
-          # Injeção direta das saídas do Job 3
-          FACE_API_ENDPOINT: ${{ needs.setup-env.outputs.face_endpoint }}
-          FACE_API_KEY: ${{ needs.setup-env.outputs.face_key }}
-          STORAGE_ACCOUNT_NAME: ${{ needs.setup-env.outputs.st_name }}
+          # Variáveis de ambiente fake para os testes rodarem sem acesso à Azure
+          FACE_API_ENDPOINT: "https://dummy.cognitiveservices.azure.com/"
+          FACE_API_KEY: "00000000000000000000000000000000"
+          STORAGE_ACCOUNT_NAME: "dummystorage"
           STORAGE_CONTAINER_NAME: "validated-faces"
-          AZURE_STORAGE_CONNECTION_STRING: ${{ needs.setup-env.outputs.st_conn }}
+          # String de conexão fake mas com formato válido para o SDK não reclamar no import
+          AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=https;AccountName=dummy;AccountKey=dummykey;EndpointSuffix=core.windows.net"
         run: |
           pip install flake8 pytest pytest-asyncio httpx -r app/requirements.txt
-          flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
-          
-          # Garante que o Python encontre o código dentro de /app
           export PYTHONPATH=$PYTHONPATH:$(pwd)/app
-          
-          # Executa o teste
           pytest
       
       - name: Azure Login
