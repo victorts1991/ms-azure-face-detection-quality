@@ -169,9 +169,6 @@ jobs:
           # 1. Carrega as variáveis protegidas do arquivo
           source azure.env
           
-          # 2. Deleta o segredo antigo para evitar cache de valores cortados
-          kubectl delete secret face-api-secrets --ignore-not-found
-
           echo "Injetando chaves reais e completas no cluster..."
           
           # 3. Cria o segredo usando chaves ${} para garantir a leitura total da string
