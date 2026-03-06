@@ -86,7 +86,7 @@ jobs:
   ci-qa-build:
     name: '4. CI: QA & Docker Build'
     needs: [setup-env]
-    if: success()
+    if: always() && needs.setup-env.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -128,25 +128,29 @@ jobs:
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
-    needs: [ci-qa-build]
-    # MUDANÇA CRUCIAL: success() faz o pipeline parar se o teste ou build falharem
-    if: success() 
+    needs: [changes, setup-env, ci-qa-build]
+    # Roda se o Build da imagem teve sucesso (independente do Terraform ter pulado)
+    if: always() && needs.ci-qa-build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Set AKS Context
+
+      # --- BLOCO K8S: Só roda se houve mudança na pasta k8s ---
+      - name: Set AKS Context & DNS
+        if: needs.changes.outputs.k8s == 'true'
         uses: azure/aks-set-context@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           resource-group: "rg-${{ secrets.PREFIX }}-prod"
           cluster-name: "${{ secrets.PREFIX }}-aks"
-      - name: Wait for AKS DNS
-        run: sleep 30
+
       - name: Sync K8s Secrets
+        if: needs.changes.outputs.k8s == 'true'
         run: |
           kubectl create secret generic face-api-secrets \
             --from-literal=FACE_API_ENDPOINT="${{ needs.setup-env.outputs.face_endpoint }}" \
@@ -155,13 +159,20 @@ jobs:
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
             --from-literal=AZURE_STORAGE_CONNECTION_STRING="${{ needs.setup-env.outputs.st_conn }}" \
             --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Prepare and Apply Manifests
+        if: needs.changes.outputs.k8s == 'true'
         run: |
           export ACR_LOGIN_SERVER=${{ needs.setup-env.outputs.acr_server }}
           envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
-      - name: Force Rollout
+
+      # --- BLOCO FINAL: Roda SEMPRE após o Step 4 ---
+      - name: Force Rollout (Update Image)
         run: |
+          # Garante o contexto caso o bloco acima tenha sido pulado
+          az aks get-credentials --resource-group rg-${{ secrets.PREFIX }}-prod --name ${{ secrets.PREFIX }}-aks --overwrite-existing
+          
+          echo "🔄 Reiniciando pods para aplicar nova imagem do Step 4..."
           kubectl rollout restart deployment face-quality-api
-          # Este comando abaixo é o que travava 6h se o container estivesse quebrado
           kubectl rollout status deployment face-quality-api --timeout=60s
