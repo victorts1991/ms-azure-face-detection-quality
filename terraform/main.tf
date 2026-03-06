@@ -8,7 +8,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "rg-terraform-state"
-    storage_account_name = "stfacequalitytf31de52"
+    storage_account_name = "stfacequalitytf271d3e"
     container_name       = "tfstate"
     key                  = "face-quality.terraform.tfstate"
   }
