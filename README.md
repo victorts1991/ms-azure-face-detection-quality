@@ -9,6 +9,12 @@ Microserviço em FastAPI para validação de qualidade de capturas faciais utili
 ## 🚀 Objetivo
 O projeto visa garantir que fotos de rostos enviadas para sistemas de identidade atendam aos requisitos mínimos de qualidade (iluminação adequada, ausência de acessórios como óculos de sol ou bonés e ângulo frontal) antes de serem persistidas no **Azure Blob Storage**.
 
+## 📺 Demonstração em Vídeo
+
+[![Demonstração do Sistema](https://img.youtube.com/vi/8O-yi99SOX4/0.jpg)](https://www.youtube.com/watch?v=8O-yi99SOX4)
+
+*Clique na imagem acima para assistir à demonstração completa do fluxo (Infra, API e CI/CD).*
+
 ## 🛠️ Stack Tecnológica
 * **Linguagem:** Python 3.11+
 * **Framework:** FastAPI
