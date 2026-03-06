@@ -61,15 +61,21 @@ jobs:
       - name: Get Resources Data
         id: get_data
         run: |
-          ACR_NAME=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ACR_SERVER=$(az acr list --query "[?contains(name, '${{ secrets.PREFIX }}')].loginServer" -o tsv | head -n 1)
-          ST_NAME=$(az storage account list --query "[?contains(name, '${{ secrets.PREFIX }}')].name" -o tsv | head -n 1)
-          ST_CONN=$(az storage account show-connection-string --name $ST_NAME --query connectionString -o tsv)
-          FACE_NAME=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].name" -o tsv | head -n 1)
-          FACE_RG=$(az cognitiveservices account list --query "[?contains(name, 'face-api')].resourceGroup" -o tsv | head -n 1)
+          # 1. ACR - Busca direta pelo Resource Group (mais seguro)
+          ACR_NAME=$(az acr list -g rg-${{ secrets.PREFIX }}-prod --query "[0].name" -o tsv)
+          ACR_SERVER=$(az acr list -g rg-${{ secrets.PREFIX }}-prod --query "[0].loginServer" -o tsv)
+          
+          # 2. Storage - Busca direta
+          ST_NAME=$(az storage account list -g rg-${{ secrets.PREFIX }}-prod --query "[0].name" -o tsv)
+          ST_CONN=$(az storage account show-connection-string --name $ST_NAME -g rg-${{ secrets.PREFIX }}-prod --query connectionString -o tsv)
+          
+          # 3. Face API - Usando o novo nome 'face2' que você criou
+          FACE_NAME="${{ secrets.PREFIX }}-ai-face2"
+          FACE_RG="rg-${{ secrets.PREFIX }}-prod"
           FACE_ENDPOINT=$(az cognitiveservices account show --name $FACE_NAME --resource-group $FACE_RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list --name $FACE_NAME --resource-group $FACE_RG --query key1 -o tsv)
 
+          # Exportando para o GitHub Actions
           echo "acr_name=$ACR_NAME" >> $GITHUB_OUTPUT
           echo "acr_server=$ACR_SERVER" >> $GITHUB_OUTPUT
           echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT

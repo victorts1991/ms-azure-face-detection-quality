@@ -225,7 +225,7 @@ kubectl get service face-quality-service --watch
 ---
 
 
-
+TODO: Depois de funcionar a última etapa, documentar como rodar com e sem o CI/CD. Depois testar indo do zero com e sem o CI/CD, seguindo o README.md
 
 Validar depois :
 
