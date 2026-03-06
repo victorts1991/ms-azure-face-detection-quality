@@ -11,9 +11,11 @@ O projeto visa garantir que fotos de rostos enviadas para sistemas de identidade
 
 ## 📺 Demonstração em Vídeo
 
-[![Demonstração do Sistema](https://img.youtube.com/vi/8O-yi99SOX4/0.jpg)](https://www.youtube.com/watch?v=8O-yi99SOX4)
+<a href="https://www.youtube.com/watch?v=8O-yi99SOX4" target="_blank">
+  <img src="https://img.youtube.com/vi/8O-yi99SOX4/0.jpg" alt="Assista a demonstração" width="600">
+</a>
 
-*Clique na imagem acima para assistir à demonstração completa do fluxo (Infra, API e CI/CD).*
+<p><i>Clique na imagem acima para abrir a demonstração em uma nova aba.</i></p>
 
 ## 🛠️ Stack Tecnológica
 * **Linguagem:** Python 3.11+
