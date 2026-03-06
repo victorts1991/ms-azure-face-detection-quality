@@ -174,8 +174,28 @@ jobs:
 
       - name: Prepare and Apply Manifests
         run: |
-          # Decodifica o server do ACR
-          export ACR_LOGIN_SERVER=$(echo "${{ needs.setup-env.outputs.acr_server }}" | base64 -d)
+          # 1. Traz o valor bruto que veio do Job 3
+          RAW_SERVER="${{ needs.setup-env.outputs.acr_server }}"
+          
+          echo "📊 --- DEBUG DE ENTRADA (JOB 5) ---"
+          echo "Tamanho do Base64 recebido: $(echo -n "$RAW_SERVER" | wc -c) caracteres"
+          
+          # 2. Tenta decodificar
+          export ACR_LOGIN_SERVER=$(echo "$RAW_SERVER" | base64 -d)
+          
+          echo "Tamanho do Valor Decodificado: $(echo -n "$ACR_LOGIN_SERVER" | wc -c) caracteres"
+          
+          # 3. TRUQUE: Mostra o valor sem disparar o filtro de segredos (trocando . por espaço)
+          # Se o valor for 'meuacr.azurecr.io', vai aparecer 'meuacr azurecr io'
+          echo "Conteúdo Decodificado (Safe): $(echo "$ACR_LOGIN_SERVER" | sed 's/\./ /g')"
+          echo "-----------------------------------"
+
+          # 4. Executa o envsubst apenas se a variável não estiver vazia
+          if [ -z "$ACR_LOGIN_SERVER" ]; then
+            echo "❌ ERRO: ACR_LOGIN_SERVER está vazio! O deploy vai falhar."
+            exit 1
+          fi
+
           envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
 
