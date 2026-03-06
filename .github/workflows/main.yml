@@ -204,3 +204,4 @@ jobs:
           
           # Timeout de 90s para evitar travamento eterno se a imagem estiver errada
           kubectl rollout status deployment face-quality-api --timeout=90s
+
