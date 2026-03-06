@@ -4,7 +4,7 @@ import uuid
 
 class StorageService:
     def __init__(self):
-        self.client = BlobServiceClient.from_connection_string(settings.AZURE_STORAGE_CONNECTION_STRING)
+        self.client = BlobServiceClient.from_connection_string(settings.STORAGE_CONNECTION_STRING)
 
     async def upload_image(self, file_content: bytes, original_name: str):
         # Gera nome único: uuid + extensão original

@@ -114,7 +114,7 @@ jobs:
           FACE_API_KEY: "00000000000000000000000000000000"
           STORAGE_ACCOUNT_NAME: "dummystorage"
           STORAGE_CONTAINER_NAME: "validated-faces"
-          AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=https;AccountName=dummy;AccountKey=dummykey;EndpointSuffix=core.windows.net"
+          STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=https;AccountName=dummy;AccountKey=dummykey;EndpointSuffix=core.windows.net"
         run: |
           pip install flake8 pytest pytest-asyncio httpx -r app/requirements.txt
           export PYTHONPATH=$PYTHONPATH:$(pwd)/app
@@ -177,7 +177,7 @@ jobs:
             --from-literal=FACE_API_KEY="${FACE_KEY}" \
             --from-literal=STORAGE_ACCOUNT_NAME="${ST_NAME}" \
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
-            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${ST_CONN}" \
+            --from-literal=STORAGE_CONNECTION_STRING="${ST_CONN}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # 3. Aplica Manifestos com substituição de variáveis

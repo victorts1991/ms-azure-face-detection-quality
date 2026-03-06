@@ -97,8 +97,6 @@ terraform apply -auto-approve
 
 ### 3. Conectando ao Ambiente
 
-### 3. Conectando ao Ambiente
-
 Após o `apply` finalizar, configure seu terminal capturando os nomes gerados. Como o Resource Group segue o padrão do seu prefixo, usaremos a variável diretamente:
 
 ```bash
@@ -107,6 +105,7 @@ PREFIX="seu_prefixo_aqui"
 RG_NAME="rg-${PREFIX}-prod"
 
 # 2. Obter credenciais do AKS (usando o output fixo do seu terraform)
+# Caso não esteja na raiz do projeto, retorne com "cd .."
 AZ_AKS=$(terraform -chdir=terraform output -raw aks_cluster_name)
 az aks get-credentials --resource-group "$RG_NAME" --name "$AZ_AKS" --overwrite-existing
 
@@ -127,7 +126,7 @@ Os seguintes valores são gerados pelo Terraform e configurados no arquivo `.env
 * **FACE_API_KEY:** Chave de autenticação da Face API.
 * **STORAGE_ACCOUNT_NAME:** Nome da conta de armazenamento.
 * **STORAGE_CONTAINER_NAME:** Nome do container de destino (`validated-faces`).
-* **AZURE_STORAGE_CONNECTION_STRING:** String de conexão completa para persistência de dados.
+* **STORAGE_CONNECTION_STRING:** String de conexão completa para persistência de dados.
 
 > **Dica:** Para extrair esses valores após o deploy da infra, utilize:
 > `terraform output -raw STORAGE_CONNECTION_STRING`
@@ -139,18 +138,32 @@ Os seguintes valores são gerados pelo Terraform e configurados no arquivo `.env
 Após o provisionamento da infraestrutura (Etapa 1), você deve configurar as credenciais no seu ambiente local em um arquivo chamado **.env**. 
 
 ### Criando o arquivo .env
-Crie um arquivo chamado **.env** na raiz do projeto e preencha com os valores obtidos acima:
+
+# 1. Recupere os valores do Terraform
+
+```bash
+
+cd ./terraform
+terraform output -raw FACE_API_ENDPOINT
+terraform output -raw FACE_API_KEY
+terraform output -raw STORAGE_ACCOUNT_NAME
+terraform output -raw STORAGE_CONTAINER_NAME
+terraform output -raw STORAGE_CONNECTION_STRING
+```
+
+# 2. Crie um arquivo chamado **.env** na raiz da pasta app e preencha com os valores obtidos acima:
 
 ```env
 FACE_API_ENDPOINT=valor_obtido_no_terraform
 FACE_API_KEY=valor_obtido_no_terraform
-AZURE_STORAGE_CONNECTION_STRING=valor_obtido_no_terraform
-STORAGE_CONTAINER_NAME=validated-faces
+STORAGE_ACCOUNT_NAME=valor_obtido_no_terraform
+STORAGE_CONTAINER_NAME=valor_obtido_no_terraform
+STORAGE_CONNECTION_STRING=valor_obtido_no_terraform
 ```
 
 ## 🛠️ Comandos de Execução Local
 
-Siga este fluxo no seu terminal para validar o microserviço:
+Vá para a raiz do projeto no terminal e siga o fluxo abaixo para validar o microserviço:
 
 ```bash
 # 1. Configurar o ambiente Python
@@ -163,7 +176,7 @@ venv\Scripts\activate
 # No Windows (PowerShell)
 .\venv\Scripts\Activate.ps1
 
-pip install -r requirements.txt
+pip install -r app/requirements.txt
 
 # 2. Executar a suíte de testes (QA Automatizado)
 pytest -v
@@ -214,7 +227,8 @@ kubectl create secret generic face-api-secrets \
   --from-literal=FACE_API_KEY="$K_KEY" \
   --from-literal=STORAGE_ACCOUNT_NAME="$K_ST_NAME" \
   --from-literal=STORAGE_CONTAINER_NAME="$K_ST_CONT" \
-  --from-literal=AZURE_STORAGE_CONNECTION_STRING="$K_ST_CONN"
+  --from-literal=STORAGE_CONNECTION_STRING="$K_ST_CONN"
+  
 ```
 
 #### C. Deploy dos Manifestos

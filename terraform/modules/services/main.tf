@@ -1,6 +1,6 @@
 # Instância da Face API
 resource "azurerm_cognitive_account" "face" {
-  name                = "${var.prefix}-ai-face2"
+  name                = "${var.prefix}-ai-face4"
   location            = var.location
   resource_group_name = var.resource_group_name
   kind                = "Face"
