@@ -285,9 +285,29 @@ Com as configurações acima realizadas, o deploy torna-se automático. Basta re
 ## 🔍 Monitorando o Deploy após a conclusão
 Após o pipeline finalizar, você pode validar a saúde da aplicação diretamente pelo seu terminal:
 
-1. Atualize seu acesso local ao cluster com o comando **az aks get-credentials --resource-group "rg-${PREFIX}-prod" --name "${PREFIX}-aks" --overwrite-existing**.
-2. Verifique se os pods estão em execução com o comando **kubectl get pods**.
-3. Acompanhe o processamento das imagens em tempo real utilizando o comando **kubectl logs -f deployment/face-quality-api**.
+1. Atualize seu acesso local ao cluster com o comando:
+
+```bash 
+
+az aks get-credentials --resource-group "rg-${PREFIX}-prod" --name "${PREFIX}-aks" --overwrite-existing
+
+```
+
+2. Verifique se os pods estão em execução e o **EXTERNAL-IP** para testes com o comando:
+
+```bash
+
+kubectl get pods
+kubectl get svc
+
+```
+3. Acompanhe o processamento das imagens em tempo real utilizando o comando:
+
+```bash
+
+kubectl logs -f deployment/face-quality-api
+
+```
 
 ---
 
