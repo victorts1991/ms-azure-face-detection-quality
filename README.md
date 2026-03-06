@@ -1,11 +1,13 @@
 # MS Azure Face Detection Quality 🛡️
 
-![Status: Em Desenvolvimento](https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github)
+![Status: Concluído](https://img.shields.io/badge/Status-Conclu%C3%ADdo-brightgreen?style=for-the-badge&logo=github)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-AKS-blue?style=for-the-badge&logo=kubernetes)
+![Terraform](https://img.shields.io/badge/IaC-Terraform-purple?style=for-the-badge&logo=terraform)
 
 Microserviço em FastAPI para validação de qualidade de capturas faciais utilizando **Azure AI Face API**, implantado em **Azure Kubernetes Service (AKS)** com infraestrutura e deploy 100% automatizados.
 
 ## 🚀 Objetivo
-Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento facial (iluminação, acessórios, ângulo) antes de persistir a imagem no Azure Blob Storage.
+O projeto visa garantir que fotos de rostos enviadas para sistemas de identidade atendam aos requisitos mínimos de qualidade (iluminação adequada, ausência de acessórios como óculos de sol ou bonés e ângulo frontal) antes de serem persistidas no **Azure Blob Storage**.
 
 ## 🛠️ Stack Tecnológica
 * **Linguagem:** Python 3.11+
@@ -13,10 +15,8 @@ Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento 
 * **IA:** Azure AI Foundry (Face API)
 * **Infra:** Azure Kubernetes Service (AKS) & Azure Container Registry (ACR)
 * **Provisionamento:** Terraform (IaC)
-* **CI/CD:** GitHub Actions
+* **CI/CD:** GitHub Actions (Estratégia de Artifact Sharing)
 * **Storage:** Azure Blob Storage
-* **Testes:** Pytest & Pytest-asyncio (QA Automatizado e Mocks)
-* **SDKs:** Azure SDK for Python (Face & Storage Blob)
 * **Containerização:** Docker
 
 ---
@@ -43,9 +43,11 @@ Validar se uma foto de rosto atende aos requisitos mínimos para reconhecimento 
 - [X] Configuração de Segredos (Secrets) no Cluster.
 
 ### 4. Automação Full CI/CD (GitHub Actions)
-- [ ] Pipeline de **Integração Contínua (CI)**: Lint, Testes Unitários e Build/Push da imagem Docker para o ACR.
-- [ ] Pipeline de **Entrega Contínua (CD)**: Atualização automática do Cluster AKS com a nova versão da imagem.
-- [ ] Gerenciamento de Secrets do GitHub para autenticação na Azure via Service Principal.
+- [x] **Integração Contínua (CI):** Linting, execução de testes unitários com mocks e Build/Push multi-estágio para o ACR.
+- [x] **Entrega Contínua (CD):** Deploy automatizado no AKS com estratégia de atualização de imagem via Rollout.
+- [x] **Auto-Discovery de Infraestrutura:** Scripting para descoberta dinâmica de endpoints e chaves pós-provisionamento.
+- [x] **Gestão de Segredos Resiliente:** Implementação de Artifact Sharing para garantir a integridade de Connection Strings complexas.
+- [x] **Deploy Idempotente:** Sincronização de Secrets do Kubernetes utilizando `dry-run` e `apply` para evitar conflitos de recursos.
 
 ---
 
@@ -94,16 +96,25 @@ terraform apply -auto-approve
 ```
 
 ### 3. Conectando ao Ambiente
-Após o `apply` finalizar, configure seu terminal:
+
+### 3. Conectando ao Ambiente
+
+Após o `apply` finalizar, configure seu terminal capturando os nomes gerados. Como o Resource Group segue o padrão do seu prefixo, usaremos a variável diretamente:
 
 ```bash
-# 1. Obter credenciais do AKS
-az aks get-credentials --resource-group rg-face-quality-prod --name facequality-aks
+# 1. Definir o prefixo usado (ex: facequality)
+PREFIX="seu_prefixo_aqui"
+RG_NAME="rg-${PREFIX}-prod"
 
-# 2. Login no Registro de Containers (ACR)
-az acr login --name facequalityregistryb814a9
+# 2. Obter credenciais do AKS (usando o output fixo do seu terraform)
+AZ_AKS=$(terraform -chdir=terraform output -raw aks_cluster_name)
+az aks get-credentials --resource-group "$RG_NAME" --name "$AZ_AKS" --overwrite-existing
 
-# 3. Validar conexão com o cluster
+# 3. Login no Registro de Containers (usando seu output acr_name)
+AZ_ACR=$(terraform -chdir=terraform output -raw acr_name)
+az acr login --name "$AZ_ACR"
+
+# 4. Validar conexão com o cluster
 kubectl get nodes
 ```
 
@@ -119,7 +130,7 @@ Os seguintes valores são gerados pelo Terraform e configurados no arquivo `.env
 * **AZURE_STORAGE_CONNECTION_STRING:** String de conexão completa para persistência de dados.
 
 > **Dica:** Para extrair esses valores após o deploy da infra, utilize:
-> `terraform output -raw AZURE_STORAGE_CONNECTION_STRING`
+> `terraform output -raw STORAGE_CONNECTION_STRING`
 
 ---
 
@@ -218,48 +229,86 @@ kubectl apply -f k8s/service.yaml
 #### D. Verificação do Status e Acesso
 Após o deploy, acompanhe a criação do IP público para realizar os testes através do IP listado em **EXTERNAL-IP**:
 
+```bash
 kubectl get pods
 
 kubectl get service face-quality-service --watch
+```
 
 ---
 
+# 🚀 Guia de Setup: Deploy Automatizado (GitHub Actions)
 
-TODO: Depois de funcionar a última etapa, documentar como rodar com e sem o CI/CD. Depois testar indo do zero com e sem o CI/CD, seguindo o README.md
+Este guia descreve como provisionar a infraestrutura e realizar o deploy do microserviço de forma 100% automatizada, utilizando o pipeline de CI/CD configurado.
 
-Validar depois :
+## 1. Preparação da Identidade (Bootstrap)
+Antes de disparar o pipeline, você precisa criar as credenciais que permitirão ao GitHub Actions gerenciar sua conta Azure. 
 
+1. Certifique-se de estar logado via Azure CLI através do comando **az login**.
+2. Execute o script de bootstrap na raiz do projeto:
 
+```bash
 
-# 🚀 Guia de Setup: Zero Absoluto (Azure CI/CD)
+chmod +x bootstrap.sh
+./bootstrap.sh
 
-Este guia descreve os passos necessários para provisionar a infraestrutura e realizar o deploy automatizado via GitHub Actions partindo do zero.
+```
 
-## 1. Preparação do Ambiente (Bootstrap)
-Antes de iniciar o pipeline, execute o script de bootstrap na sua máquina local. Você deve estar logado no Azure CLI com uma conta que possua permissão de **Owner** na assinatura.
+3. **Importante:** Ao final, o script imprimirá um JSON (identificado como **AZURE_CREDENTIALS**) e o nome de uma Storage Account. Guarde esses valores com cuidado.
 
-* **Comando:** `chmod +x bootstrap.sh && ./bootstrap.sh`
-* **O que ele faz:**
-    * Cria o **Resource Group** para o estado do Terraform (`rg-terraform-state`).
-    * Cria a **Storage Account** com nome único para armazenar o arquivo `.tfstate`.
-    * Cria o **Service Principal** (Identidade) que o GitHub Actions utilizará.
-    * Eleva a permissão do Service Principal para **User Access Administrator**, permitindo que o Terraform configure o acesso entre o AKS e o ACR (AcrPull) automaticamente.
+## 2. Configuração de Segredos no GitHub
+Para que o workflow tenha permissão de execução, você deve configurar os seguintes **Actions Secrets** no seu repositório, acessando as abas **Settings > Secrets and variables > Actions**:
 
+* **AZURE_CREDENTIALS**: Insira o JSON completo gerado pelo script de bootstrap.
+* **PREFIX**: Escolha um nome curto para identificar seus recursos de forma única (ex: **facequality**).
 
+## 3. Vinculação do Terraform ao Backend
+Abra o arquivo **terraform/main.tf** e localize o bloco identificado como **backend "azurerm"**. Você deve atualizar o campo **storage_account_name** com o nome exato da conta de armazenamento gerada no passo do bootstrap. Isso garante que o estado da sua infraestrutura seja salvo na nuvem e não localmente.
 
-## 2. Configuração de Secrets no GitHub
-No repositório do GitHub, acesse **Settings > Secrets and variables > Actions** e adicione as seguintes chaves:
+## 4. Executando o Pipeline
+Com as configurações acima realizadas, o deploy torna-se automático. Basta realizar um **git push** para a branch **main** e observar o progresso na aba **Actions** do seu repositório.
 
-* **AZURE_CREDENTIALS:** Cole o JSON completo gerado no final da execução do script de bootstrap.
-* **PREFIX:** O nome base definido para os recursos (ex: `facequality`).
+### O que o Pipeline faz automaticamente:
+* **Infraestrutura:** O Terraform valida e aplica as mudanças necessárias na Azure (criação de AKS, ACR, Face API e Storage).
+* **Auto-Discovery:** O Job de configuração busca dinamicamente os nomes dos recursos e chaves gerados, eliminando a necessidade de configuração manual de endpoints.
+* **QA & Build:** O sistema executa a suíte de testes unitários com Pytest e, se aprovada, gera a imagem Docker e a envia para o seu registro privado (ACR).
+* **Deploy Idempotente:** O pipeline sincroniza os segredos no Kubernetes e realiza o reinício controlado (rollout) da aplicação para aplicar a nova versão sem quedas.
 
-## 3. Sincronização do Terraform
-No arquivo `main.tf` do seu projeto, localize o bloco de configuração do **backend** e atualize o nome da Storage Account:
+## 🔍 Monitorando o Deploy após a conclusão
+Após o pipeline finalizar, você pode validar a saúde da aplicação diretamente pelo seu terminal:
 
-* **storage_account_name:** Utilize o nome exato impresso pelo script de bootstrap (ex: `stfacequalitytf2ae3ab`).
+1. Atualize seu acesso local ao cluster com o comando **az aks get-credentials --resource-group "rg-${PREFIX}-prod" --name "${PREFIX}-aks" --overwrite-existing**.
+2. Verifique se os pods estão em execução com o comando **kubectl get pods**.
+3. Acompanhe o processamento das imagens em tempo real utilizando o comando **kubectl logs -f deployment/face-quality-api**.
 
-## ⚠️ Notas de Resiliência (Troubleshooting)
+---
 
-* **Conflito de Soft-Delete (Face API):** A Azure mantém recursos de Cognitive Services em uma "lixeira" por 48h após a exclusão. Se o Terraform falhar com erro 409 (Conflict), basta alterar o nome do recurso no código (ex: de `facequality-ai-face` para `facequality-ai-face2`) e realizar um novo push.
-* **Propagação de DNS do AKS:** No primeiro deploy, o comando `kubectl` pode falhar com erro `no such host`. Isso ocorre porque o DNS do cluster ainda está propagando. O pipeline possui um `sleep` de segurança, mas se falhar, basta clicar em **Re-run failed jobs**.
-* **Bloqueio de Permissão (RBAC):** Caso o Terraform apresente erro de `AuthorizationFailed` ao tentar criar o Role Assignment, certifique-se de que o Service Principal recebeu corretamente a permissão de administrador no passo de bootstrap.
+## ⚙️ Funcionamento do Pipeline (GitHub Actions)
+
+O workflow `Full CI/CD` foi desenhado seguindo princípios de **GitOps** e **Infraestrutura como Código (IaC)**, dividindo-se em 5 etapas principais:
+
+### 1. Detectar Alterações 🔍
+* O pipeline utiliza filtros de caminho (`paths-filter`) para otimizar o tempo de execução.
+* Ele identifica se as mudanças ocorreram na pasta `terraform/` (infraestrutura).
+* Se não houver mudanças na infraestrutura, o estágio de Terraform é ignorado para economizar recursos.
+
+### 2. Provisionamento de Infraestrutura (IaC) 🏗️
+* Realiza o `terraform init` e `terraform apply` de forma automatizada.
+* Garante que o cluster AKS, o Registro de Containers (ACR) e os serviços de IA (Face API) estejam no estado desejado.
+* Utiliza um **Backend Remoto** para garantir a consistência do estado entre diferentes execuções.
+
+### 3. Auto-Discovery & Secrets Management 🔐
+* Esta é a inteligência do pipeline: ele utiliza a **Azure CLI** para descobrir dinamicamente os endpoints e chaves gerados pelo Terraform.
+* Os dados são exportados para um arquivo protegido (`azure.env`) e carregados como um **Artifact** do GitHub.
+* **Resiliência:** Esta etapa protege caracteres especiais das Connection Strings, evitando corrupção de dados no deploy.
+
+### 4. CI: QA & Docker Build 🛠️
+* **Qualidade (QA):** Executa a suíte de testes unitários com `Pytest` em um ambiente virtualizado.
+* **Build:** Se os testes passarem, o Docker constrói a imagem da aplicação.
+* **Push:** A imagem é tagueada e enviada para o **Azure Container Registry (ACR)** privado.
+
+### 5. CD: Deploy & Rollout AKS 🚀
+* **Sync de Secrets:** Injeta as credenciais descobertas no estágio 3 diretamente no Kubernetes via `kubectl apply`.
+* **Manifestos Dinâmicos:** Utiliza o `envsubst` para injetar o endereço do ACR nos arquivos YAML de deployment.
+* **Zero Downtime:** Executa um `rollout restart` para que os pods antigos sejam substituídos pelos novos sem interromper o serviço.
+* **Health Check:** O pipeline aguarda o status do rollout para confirmar que a aplicação subiu com sucesso.
