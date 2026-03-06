@@ -141,7 +141,7 @@ jobs:
 
   cd-deploy:
     name: '5. CD: Deploy AKS'
-    needs: [ci-qa-build]
+    needs: [ci-qa-build] 
     if: always() && needs.ci-qa-build.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -153,7 +153,6 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Set AKS Context & DNS
-        if: needs.changes.outputs.k8s == 'true'
         uses: azure/aks-set-context@v3
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -161,28 +160,27 @@ jobs:
           cluster-name: "${{ secrets.PREFIX }}-aks"
 
       - name: Sync K8s Secrets
-        if: needs.changes.outputs.k8s == 'true'
         run: |
+          # Decodifica a connection string vinda do Job 3
+          ST_CONN=$(echo "${{ needs.setup-env.outputs.st_conn }}" | base64 -d)
+          
           kubectl create secret generic face-api-secrets \
             --from-literal=FACE_API_ENDPOINT="${{ needs.setup-env.outputs.face_endpoint }}" \
             --from-literal=FACE_API_KEY="${{ needs.setup-env.outputs.face_key }}" \
             --from-literal=STORAGE_ACCOUNT_NAME="${{ needs.setup-env.outputs.st_name }}" \
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
-            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${{ needs.setup-env.outputs.st_conn }}" \
+            --from-literal=AZURE_STORAGE_CONNECTION_STRING="$ST_CONN" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Prepare and Apply Manifests
-        if: needs.changes.outputs.k8s == 'true'
         run: |
-          export ACR_LOGIN_SERVER="${{ needs.setup-env.outputs.acr_server }}"
+          # Decodifica o server do ACR
+          export ACR_LOGIN_SERVER=$(echo "${{ needs.setup-env.outputs.acr_server }}" | base64 -d)
           envsubst < k8s/deployment.yaml | kubectl apply -f -
           kubectl apply -f k8s/service.yaml
 
       - name: Force Rollout (Update Image)
         run: |
-          # Garante o contexto para o restart
           az aks get-credentials --resource-group "rg-${{ secrets.PREFIX }}-prod" --name "${{ secrets.PREFIX }}-aks" --overwrite-existing
-          
-          echo "🔄 Reiniciando pods..."
           kubectl rollout restart deployment face-quality-api
           kubectl rollout status deployment face-quality-api --timeout=90s

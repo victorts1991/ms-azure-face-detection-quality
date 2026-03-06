@@ -35,5 +35,3 @@ spec:
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 10
-
-# test commit: 1
