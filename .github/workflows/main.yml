@@ -73,15 +73,15 @@ jobs:
           FACE_ENDPOINT=$(az cognitiveservices account show -n $FACE_NAME -g $RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list -n $FACE_NAME -g $RG --query key1 -o tsv)
 
-          # Salva em arquivo para evitar a censura de outputs do GitHub
-          echo "ACR_NAME=$ACR_NAME" > azure.env
-          echo "ACR_SERVER=$ACR_SERVER" >> azure.env
-          echo "ST_NAME=$ST_NAME" >> azure.env
-          echo "ST_CONN=$ST_CONN" >> azure.env
-          echo "FACE_ENDPOINT=$FACE_ENDPOINT" >> azure.env
-          echo "FACE_KEY=$FACE_KEY" >> azure.env
+          # O PULO DO GATO: Aspas simples protegem os caracteres ';' e '&' da Connection String
+          echo "ACR_NAME='$ACR_NAME'" > azure.env
+          echo "ACR_SERVER='$ACR_SERVER'" >> azure.env
+          echo "ST_NAME='$ST_NAME'" >> azure.env
+          echo "ST_CONN='$ST_CONN'" >> azure.env
+          echo "FACE_ENDPOINT='$FACE_ENDPOINT'" >> azure.env
+          echo "FACE_KEY='$FACE_KEY'" >> azure.env
           
-          echo "Arquivo azure.env gerado com sucesso."
+          echo "Arquivo azure.env gerado com proteção de caracteres especiais."
 
       - name: Upload das Variáveis
         uses: actions/upload-artifact@v4
@@ -166,25 +166,21 @@ jobs:
       # 2. Sincroniza Secrets usando o arquivo baixado
       - name: Sync K8s Secrets
         run: |
-          # 1. Carrega as variáveis do arquivo baixado
+          # 1. Carrega as variáveis protegidas do arquivo
           source azure.env
           
-          # 2. Verifica se a variável existe antes de aplicar (Fail fast)
-          if [ -z "$ST_CONN" ]; then
-            echo "ERRO: ST_CONN está vazia no arquivo azure.env!"
-            exit 1
-          fi
+          # 2. Deleta o segredo antigo para evitar cache de valores cortados
+          kubectl delete secret face-api-secrets --ignore-not-found
 
-          echo "Atualizando secrets no cluster com as chaves reais..."
+          echo "Injetando chaves reais e completas no cluster..."
           
-          # 3. Cria o secret garantindo que o valor de ST_CONN seja passado corretamente
+          # 3. Cria o segredo usando chaves ${} para garantir a leitura total da string
           kubectl create secret generic face-api-secrets \
-            --from-literal=FACE_API_ENDPOINT="$FACE_ENDPOINT" \
-            --from-literal=FACE_API_KEY="$FACE_KEY" \
-            --from-literal=STORAGE_ACCOUNT_NAME="$ST_NAME" \
+            --from-literal=FACE_API_ENDPOINT="${FACE_ENDPOINT}" \
+            --from-literal=FACE_API_KEY="${FACE_KEY}" \
+            --from-literal=STORAGE_ACCOUNT_NAME="${ST_NAME}" \
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
-            --from-literal=AZURE_STORAGE_CONNECTION_STRING="$ST_CONN" \
-            --save-config --dry-run=client -o yaml | kubectl apply -f -
+            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${ST_CONN}"
 
       # 3. Aplica Manifestos com substituição de variáveis
       - name: Prepare and Apply Manifests
