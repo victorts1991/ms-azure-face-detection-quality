@@ -177,7 +177,8 @@ jobs:
             --from-literal=FACE_API_KEY="${FACE_KEY}" \
             --from-literal=STORAGE_ACCOUNT_NAME="${ST_NAME}" \
             --from-literal=STORAGE_CONTAINER_NAME="validated-faces" \
-            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${ST_CONN}"
+            --from-literal=AZURE_STORAGE_CONNECTION_STRING="${ST_CONN}" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       # 3. Aplica Manifestos com substituição de variáveis
       - name: Prepare and Apply Manifests
