@@ -166,10 +166,18 @@ jobs:
       # 2. Sincroniza Secrets usando o arquivo baixado
       - name: Sync K8s Secrets
         run: |
-          # Carrega as variáveis do arquivo para o shell atual
+          # 1. Carrega as variáveis do arquivo baixado
           source azure.env
           
-          echo "Atualizando secrets no cluster..."
+          # 2. Verifica se a variável existe antes de aplicar (Fail fast)
+          if [ -z "$ST_CONN" ]; then
+            echo "ERRO: ST_CONN está vazia no arquivo azure.env!"
+            exit 1
+          fi
+
+          echo "Atualizando secrets no cluster com as chaves reais..."
+          
+          # 3. Cria o secret garantindo que o valor de ST_CONN seja passado corretamente
           kubectl create secret generic face-api-secrets \
             --from-literal=FACE_API_ENDPOINT="$FACE_ENDPOINT" \
             --from-literal=FACE_API_KEY="$FACE_KEY" \
