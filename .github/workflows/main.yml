@@ -95,9 +95,18 @@ jobs:
         with:
           python-version: '3.11'
       - name: Lint & Testes
+        env:
+          # Injeta as variáveis para o Pydantic utilizar durante os testes, garantindo que o ambiente de teste seja o mais próximo possível do real
+          FACE_API_ENDPOINT: ${{ needs.setup-env.outputs.face_endpoint }}
+          FACE_API_KEY: ${{ needs.setup-env.outputs.face_key }}
+          STORAGE_ACCOUNT_NAME: ${{ needs.setup-env.outputs.st_name }}
+          STORAGE_CONTAINER_NAME: "validated-faces"
+          AZURE_STORAGE_CONNECTION_STRING: ${{ needs.setup-env.outputs.st_conn }}
         run: |
           pip install flake8 pytest pytest-asyncio httpx -r app/requirements.txt
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # PYTHONPATH garante que o pytest enxergue a pasta app
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/app
           pytest
       - name: Azure Login
         uses: azure/login@v1
