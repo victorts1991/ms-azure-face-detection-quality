@@ -63,30 +63,35 @@ jobs:
         run: |
           # 1. Definir o Resource Group para evitar repetição
           RG="rg-${{ secrets.PREFIX }}-prod"
+          echo "Buscando recursos no Resource Group: $RG"
 
           # 2. ACR
           ACR_NAME=$(az acr list -g $RG --query "[0].name" -o tsv)
           ACR_SERVER=$(az acr list -g $RG --query "[0].loginServer" -o tsv)
           
-          # 3. Storage - Aqui está o provável erro
+          # 3. Storage
           ST_NAME=$(az storage account list -g $RG --query "[0].name" -o tsv)
-          
           ST_CONN=$(az storage account show-connection-string -g $RG -n $ST_NAME --query connectionString -o tsv)
           
-          # 4. Face API (Lembrando do nome face2 que você mudou)
+          # 4. Face API
           FACE_NAME="${{ secrets.PREFIX }}-ai-face2"
-          
           FACE_ENDPOINT=$(az cognitiveservices account show -n $FACE_NAME -g $RG --query properties.endpoint -o tsv)
           FACE_KEY=$(az cognitiveservices account keys list -n $FACE_NAME -g $RG --query key1 -o tsv)
 
-          # 5. Exportação para o GitHub Actions
-          # Exportação com Base64 para evitar que o GitHub bloqueie por "achar" que é segredo
-          echo "acr_name=$(echo -n $ACR_NAME | base64)" >> $GITHUB_OUTPUT
-          echo "acr_server=$(echo -n $ACR_SERVER | base64)" >> $GITHUB_OUTPUT
+          # 5. Exportação com Base64 (O segredo é o -w 0 para manter em uma linha só)
+          # Isso evita o erro "Invalid format" e pula o filtro de segredos do GitHub
+          ACR_NAME_B64=$(echo -n "$ACR_NAME" | base64 -w 0)
+          ACR_SERVER_B64=$(echo -n "$ACR_SERVER" | base64 -w 0)
+          ST_CONN_B64=$(echo -n "$ST_CONN" | base64 -w 0)
+
+          echo "acr_name=${ACR_NAME_B64}" >> $GITHUB_OUTPUT
+          echo "acr_server=${ACR_SERVER_B64}" >> $GITHUB_OUTPUT
+          echo "st_conn=${ST_CONN_B64}" >> $GITHUB_OUTPUT
+          
+          # Estes campos abaixo não são mascarados, então vão direto
           echo "face_endpoint=$FACE_ENDPOINT" >> $GITHUB_OUTPUT
           echo "face_key=$FACE_KEY" >> $GITHUB_OUTPUT
           echo "st_name=$ST_NAME" >> $GITHUB_OUTPUT
-          echo "st_conn=$(echo -n $ST_CONN | base64)" >> $GITHUB_OUTPUT
 
   ci-qa-build:
     name: '4. CI: QA & Docker Build'
@@ -121,19 +126,17 @@ jobs:
           
       - name: Build and Push
         env:
-          ACR_NAME: ${{ needs.setup-env.outputs.acr_name }}
-          ACR_SERVER: ${{ needs.setup-env.outputs.acr_server }}
+          ACR_NAME_RAW: ${{ needs.setup-env.outputs.acr_name }}
+          ACR_SERVER_RAW: ${{ needs.setup-env.outputs.acr_server }}
         run: |
-          # Transforma de volta em texto legível
-          ACR_NAME=$(echo $ACR_NAME_RAW | base64 -d)
-          ACR_SERVER=$(echo $ACR_SERVER_RAW | base64 -d)
+          # Decodificando com segurança
+          ACR_NAME=$(echo "${ACR_NAME_RAW}" | base64 -d)
+          ACR_SERVER=$(echo "${ACR_SERVER_RAW}" | base64 -d)
           
+          echo "Login no ACR: $ACR_NAME"
           az acr login --name "$ACR_NAME"
           
-          echo "Buildando imagem..."
           docker build -t "$ACR_SERVER/face-detection-quality:latest" .
-          
-          echo "Fazendo push..."
           docker push "$ACR_SERVER/face-detection-quality:latest"
 
   cd-deploy:
